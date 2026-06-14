@@ -80,9 +80,9 @@ dword_result_t NtCreateFile_entry(lpdword_t handle_out, dword_t desired_access,
 
   /* To implement automatic backups of save files, we read our own copy
      of the save file every time the game opens the file for reading,
-     and then write out that copy every time the game opens the file for writing.
-     We do it this way because Fable II blasts away the save file by the time
-     it opens it for writing. */
+     and then write out that copy every time the game opens the file for
+     writing. We do it this way because Fable II blasts away the save file by
+     the time it opens it for writing. */
   if (desired_access & (xe::filesystem::FileAccess::kGenericRead |
                         xe::filesystem::FileAccess::kFileReadData)) {
     size_t fileIndex = 0;
@@ -276,6 +276,15 @@ dword_result_t NtReadFile_entry(dword_t file_handle, dword_t event_handle,
       // Mark that we should signal the event now. We do this after
       // we have written the info out.
       signal_event = true;
+
+      if (XSUCCEEDED(result)) {
+        if (auto patch = kernel_state()->xmp_volume_patch()) {
+          auto host_buf =
+              kernel_memory()->TranslateVirtual(buffer.guest_address());
+          patch->OnFileRead(file->entry()->name(), host_buf, buffer_length,
+                            buffer.guest_address());
+        }
+      }
     } else {
       // TODO(benvanik): async.
 
@@ -451,6 +460,15 @@ dword_result_t NtWriteFile_entry(dword_t file_handle, dword_t event_handle,
       // Mark that we should signal the event now. We do this after
       // we have written the info out.
       signal_event = true;
+
+      if (XSUCCEEDED(result)) {
+        if (auto patch = kernel_state()->xmp_volume_patch()) {
+          auto host_buf =
+              kernel_memory()->TranslateVirtual(buffer.guest_address());
+          patch->OnFileWrite(file->entry()->name(), host_buf, buffer_length,
+                             buffer.guest_address());
+        }
+      }
     } else {
       // X_STATUS_PENDING if not returning immediately.
       result = X_STATUS_PENDING;
@@ -547,6 +565,16 @@ dword_result_t NtRemoveIoCompletion_entry(
 }
 DECLARE_XBOXKRNL_EXPORT2(NtRemoveIoCompletion, kFileSystem, kImplemented,
                          kHighFrequency);
+
+dword_result_t NtCancelIoFile_entry(dword_t handle) {
+  auto file = kernel_state()->object_table()->LookupObject<XFile>(handle);
+  if (!file) {
+    return X_STATUS_INVALID_HANDLE;
+  }
+
+  return X_STATUS_SUCCESS;
+}
+DECLARE_XBOXKRNL_EXPORT1(NtCancelIoFile, kFileSystem, kStub);
 
 dword_result_t NtQueryFullAttributesFile_entry(
     pointer_t<X_OBJECT_ATTRIBUTES> obj_attribs,

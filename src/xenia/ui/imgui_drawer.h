@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "third_party/imgui/imgui.h"
+#include "xenia/hid/input_system.h"
 #include "xenia/ui/immediate_drawer.h"
 #include "xenia/ui/presenter.h"
 #include "xenia/ui/window.h"
@@ -89,6 +90,11 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
     return GetIO().Fonts->Fonts[1];
   }
 
+  void LoadInputSystem(hid::InputSystem* input_system);
+  void SetGuideButtonAction(std::function<void(uint8_t)> func);
+
+  bool IsAnyDialogOpen() const { return !dialogs_.empty(); };
+
  protected:
   void OnKeyDown(KeyEvent& e) override;
   void OnKeyUp(KeyEvent& e) override;
@@ -119,6 +125,7 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
 
   bool IsDrawingDialogs() const { return dialog_loop_next_index_ != SIZE_MAX; }
   void DetachIfLastWindowRemoved();
+  void UpdateGamepads();
 
   std::optional<ImGuiKey> VirtualKeyToImGuiKey(VirtualKey vkey);
 
@@ -126,7 +133,9 @@ class ImGuiDrawer : public WindowInputListener, public UIDrawer {
   size_t z_order_;
 
   ImGuiContext* internal_state_ = nullptr;
+  hid::InputSystem* input_system_ = nullptr;
 
+  std::function<void(uint8_t)> onGuidePressFunction_;
   // All currently-attached dialogs that get drawn.
   std::vector<ImGuiDialog*> dialogs_;
 

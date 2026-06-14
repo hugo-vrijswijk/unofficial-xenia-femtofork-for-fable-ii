@@ -1,5 +1,3 @@
-
-
 #if defined(OVERRIDING_BASE_CMDPROCESSOR)
 #define PM4_OVERRIDE override
 #else
@@ -60,7 +58,7 @@ bool ExecutePacketType3_EVENT_WRITE_ZPD(uint32_t packet,
 
 bool ExecutePacketType3Draw(uint32_t packet, const char* opcode_name,
                             bool may_require_readback_resolve,
-                            uint32_t count_remainingresolve) XE_RESTRICT;
+                            uint32_t count_remaining) XE_RESTRICT;
 
 bool ExecutePacketType3_DRAW_INDX(uint32_t packet, uint32_t count) XE_RESTRICT;
 

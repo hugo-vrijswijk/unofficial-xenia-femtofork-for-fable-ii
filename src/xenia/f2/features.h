@@ -1,8 +1,9 @@
-
 #ifndef XENIA_F2_FEATURES_H_
 #define XENIA_F2_FEATURES_H_
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <vector>
 

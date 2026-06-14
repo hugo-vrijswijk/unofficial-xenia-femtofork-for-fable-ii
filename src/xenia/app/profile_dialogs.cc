@@ -6,11 +6,8 @@
  * Released under the BSD license - see LICENSE in the root for more details. *
  ******************************************************************************
  */
-
-#include <algorithm>
-
-#include "xenia/app/emulator_window.h"
 #include "xenia/app/profile_dialogs.h"
+#include "xenia/app/emulator_window.h"
 #include "xenia/base/png_utils.h"
 #include "xenia/base/system.h"
 #include "xenia/kernel/util/shim_utils.h"
@@ -32,7 +29,7 @@ void NoProfileDialog::OnDraw(ImGuiIO& io) {
                              ->profile_manager();
 
   if (profile_manager->GetAccountCount()) {
-    delete this;
+    Close();
     return;
   }
 
@@ -48,7 +45,7 @@ void NoProfileDialog::OnDraw(ImGuiIO& io) {
                         ImGuiWindowFlags_AlwaysAutoResize |
                         ImGuiWindowFlags_HorizontalScrollbar)) {
     ImGui::End();
-    delete this;
+    Close();
     return;
   }
 
@@ -64,6 +61,9 @@ void NoProfileDialog::OnDraw(ImGuiIO& io) {
   const auto content_files = xe::filesystem::ListDirectories(
       emulator_window_->emulator()->content_root());
 
+  if (ImGui::IsWindowAppearing()) {
+    ImGui::SetKeyboardFocusHere();
+  }
   if (content_files.empty()) {
     if (ImGui::Button("Create Profile")) {
       new kernel::xam::ui::CreateProfileUI(emulator_window_->imgui_drawer(),
@@ -85,7 +85,7 @@ void NoProfileDialog::OnDraw(ImGuiIO& io) {
   if (ImGui::Button("Close") || !dialog_open) {
     emulator_window_->SetHotkeysState(true);
     ImGui::End();
-    delete this;
+    Close();
     return;
   }
   ImGui::End();
@@ -171,6 +171,16 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
     return;
   }
 
+  // For whatever reason dialog wasn't opened. It's probably in closing state.
+  // We need to handle it here before it will make icons allocation.
+  if (!dialog_open) {
+    ImGui::CloseCurrentPopup();
+    Close();
+    ImGui::End();
+    emulator_window_->ToggleProfilesConfigDialog();
+    return;
+  }
+
   if (profiles->empty()) {
     ImGui::TextUnformatted("No profiles found!");
     ImGui::Spacing();
@@ -182,7 +192,7 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
              ImGui::GetWindowPos().y);
 
   for (auto& [xuid, account] : *profiles) {
-    ImGui::PushID(static_cast<int>(xuid));
+    ImGui::PushID(fmt::format("{:016X}", xuid).c_str());
 
     const uint8_t user_index =
         profile_manager->GetUserIndexAssignedToProfile(xuid);
@@ -206,7 +216,21 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
           if (ImGui::BeginMenu("Login to slot:")) {
             for (uint8_t i = 1; i <= XUserMaxUserCount; i++) {
               if (ImGui::MenuItem(fmt::format("slot {}", i).c_str())) {
+                uint64_t current_slot_xuid = 0;
+
+                if (const auto current_profile = profile_manager->GetProfile(
+                        static_cast<uint8_t>(i - 1));
+                    current_profile) {
+                  current_slot_xuid = current_profile->xuid();
+                }
+
                 profile_manager->Login(xuid, i - 1);
+                LoadProfileIcon(xuid);
+
+                // Release resources
+                if (current_slot_xuid) {
+                  LoadProfileIcon(current_slot_xuid);
+                }
               }
             }
             ImGui::EndMenu();
@@ -294,11 +318,6 @@ void ProfileConfigDialog::OnDraw(ImGuiIO& io) {
   }
 
   ImGui::End();
-
-  if (!dialog_open) {
-    emulator_window_->ToggleProfilesConfigDialog();
-    return;
-  }
 }
 
 }  // namespace app

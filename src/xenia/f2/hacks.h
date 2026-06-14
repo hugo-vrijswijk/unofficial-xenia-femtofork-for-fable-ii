@@ -1,6 +1,7 @@
-
 #ifndef XENIA_F2_HACKS_H_
 #define XENIA_F2_HACKS_H_
+
+#include <cstdint>
 
 namespace xe {
 namespace f2 {

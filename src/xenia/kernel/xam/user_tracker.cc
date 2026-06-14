@@ -10,9 +10,6 @@
 #include "xenia/emulator.h"
 #include "xenia/kernel/xam/user_profile.h"
 
-#include <ranges>
-#include <sstream>
-
 #include "third_party/fmt/include/fmt/format.h"
 #include "third_party/stb/stb_image.h"
 #include "xenia/kernel/kernel_state.h"
@@ -31,7 +28,7 @@ namespace xam {
 
 bool UserTracker::AddUser(uint64_t xuid) {
   if (IsUserTracked(xuid)) {
-    XELOGW("{}: User is already on tracking list!");
+    XELOGW("{}: User is already on tracking list!", __func__);
     return false;
   }
 
@@ -45,7 +42,7 @@ bool UserTracker::AddUser(uint64_t xuid) {
 
 bool UserTracker::RemoveUser(uint64_t xuid) {
   if (!IsUserTracked(xuid)) {
-    XELOGW("{}: User is not on tracking list!");
+    XELOGW("{}: User is not on tracking list!", __func__);
     return false;
   }
 
@@ -188,6 +185,19 @@ void UserTracker::AddTitleToPlayedList(uint64_t xuid) {
   UpdateProfileGpd();
 }
 
+void UserTracker::RemoveTitleFromPlayedList(uint64_t xuid, uint32_t title_id) {
+  auto user = kernel_state()->xam_state()->GetUserProfile(xuid);
+  if (!user) {
+    return;
+  }
+
+  if (user->dashboard_gpd_.RemoveTitle(title_id)) {
+    UpdateSettingValue(xuid, kDashboardID,
+                       UserSettingId::XPROFILE_GAMERCARD_TITLES_PLAYED, -1);
+    FlushUserData(xuid);
+  }
+}
+
 // Privates
 bool UserTracker::IsUserTracked(uint64_t xuid) const {
   return tracked_xuids_.find(xuid) != tracked_xuids_.cend();
@@ -196,7 +206,7 @@ bool UserTracker::IsUserTracked(uint64_t xuid) const {
 std::optional<TitleInfo> UserTracker::GetUserTitleInfo(
     uint64_t xuid, uint32_t title_id) const {
   if (!IsUserTracked(xuid)) {
-    XELOGW("{}: User is not on tracking list!");
+    XELOGW("{}: User is not on tracking list!", __func__);
     return std::nullopt;
   }
 
@@ -225,8 +235,8 @@ std::optional<TitleInfo> UserTracker::GetUserTitleInfo(
   info.icon = game_gpd->second.GetImage(kXdbfIdTitle);
 
   if (title_data->last_played.is_valid()) {
-    info.last_played = chrono::WinSystemClock::to_local(
-        title_data->last_played.to_time_point());
+    info.last_played =
+        chrono::WinSystemClock::to_sys(title_data->last_played.to_time_point());
   }
 
   return info;
@@ -260,7 +270,7 @@ std::vector<TitleInfo> UserTracker::GetPlayedTitles(uint64_t xuid) const {
     info.title_name = user->dashboard_gpd_.GetTitleName(title_data->title_id);
 
     if (title_data->last_played.is_valid()) {
-      info.last_played = chrono::WinSystemClock::to_local(
+      info.last_played = chrono::WinSystemClock::to_sys(
           title_data->last_played.to_time_point());
     }
 
@@ -339,7 +349,8 @@ void UserTracker::UpdateTitleGpdFile() {
     }
 
     auto user_language = spa_data_->GetExistingLanguage(
-        static_cast<XLanguage>(cvars::user_language));
+        static_cast<XLanguage>(kernel_state()->xconfig()->ReadSetting<uint32_t>(
+            kernel::XCONFIG_USER_CATEGORY, kernel::XCONFIG_USER_LANGUAGE)));
 
     // First add achievements because of lowest ID
     for (const auto& entry : spa_data_->GetAchievements()) {
@@ -549,7 +560,7 @@ std::optional<UserSetting> UserTracker::GetSetting(UserProfile* user,
     return gpd_setting.value();
   }
 
-  return UserSetting::GetDefaultSetting(user, setting_id);
+  return UserSetting::GetDefaultSetting(setting_id);
 }
 
 bool UserTracker::GetUserSetting(uint64_t xuid, uint32_t title_id,
@@ -724,7 +735,7 @@ void UserTracker::UpsertSetting(uint64_t xuid, uint32_t title_id,
   // Sometimes games like to ignore providing expicitly title_id, so we need to
   // check it.
   if (!title_id) {
-    title_id = spa_data_->title_id();
+    title_id = spa_data_ ? spa_data_->title_id() : kernel_state()->title_id();
   }
 
   GpdInfo* info = user->GetGpd(title_id);

@@ -7,9 +7,9 @@
  ******************************************************************************
  */
 
-#include "xenia/kernel/xam/profile_manager.h"
+#include <regex>
 
-#include <filesystem>
+#include "xenia/kernel/xam/profile_manager.h"
 
 #include "xenia/base/logging.h"
 #include "xenia/emulator.h"
@@ -56,9 +56,6 @@ bool ProfileManager::DecryptAccountFile(const uint8_t* data,
   if (std::memcmp(data, data_hash, 0x10) == 0) {
     // Copy account data to output
     std::memcpy(output, dec_data + 8, sizeof(X_XAMACCOUNTINFO));
-
-    // Swap gamertag endian
-    xe::copy_and_swap<char16_t>(output->gamertag, output->gamertag, 0x10);
     return true;
   }
 
@@ -75,10 +72,6 @@ void ProfileManager::EncryptAccountFile(const X_XAMACCOUNTINFO* input,
   X_XAMACCOUNTINFO* output_acct =
       reinterpret_cast<X_XAMACCOUNTINFO*>(output + 0x18);
   std::memcpy(output_acct, input, sizeof(X_XAMACCOUNTINFO));
-
-  // Swap gamertag endian
-  xe::copy_and_swap<char16_t>(output_acct->gamertag, output_acct->gamertag,
-                              0x10);
 
   // Set confounder, should be random but meh
   std::memset(output + 0x10, 0xFD, 8);
@@ -285,10 +278,11 @@ void ProfileManager::Login(const uint64_t xuid, const uint8_t user_index,
   }
 
   // Find if xuid is already logged in. We might want to logout.
-  for (auto& logged_profile : logged_profiles_) {
-    if (logged_profile.second->xuid() == xuid) {
-      Logout(logged_profile.first);
-    }
+  auto it = std::find_if(
+      logged_profiles_.begin(), logged_profiles_.end(),
+      [xuid](const auto& entry) { return entry.second->xuid() == xuid; });
+  if (it != logged_profiles_.end()) {
+    Logout(it->first);
   }
 
   if (!accounts_.count(xuid)) {
@@ -502,10 +496,10 @@ const X_XAMACCOUNTINFO* ProfileManager::GetAccount(const uint64_t xuid) {
 bool ProfileManager::CreateAccount(const uint64_t xuid,
                                    const std::string gamertag) {
   X_XAMACCOUNTINFO account = {};
-  std::u16string gamertag_u16 = xe::to_utf16(gamertag);
+  const std::u16string gamertag_u16 = xe::to_utf16(gamertag);
 
-  string_util::copy_truncating(account.gamertag, gamertag_u16,
-                               sizeof(account.gamertag));
+  string_util::copy_and_swap_truncating(account.gamertag, gamertag_u16,
+                                        sizeof(account.gamertag));
 
   const bool result = UpdateAccount(xuid, &account);
   DismountProfile(xuid);
@@ -605,22 +599,13 @@ bool ProfileManager::DeleteProfile(const uint64_t xuid) {
 }
 
 bool ProfileManager::IsGamertagValid(const std::string gamertag) {
-  if (gamertag.empty()) {
+  std::regex pattern(R"(^[A-Za-z][A-Za-z0-9]*( [A-Za-z0-9]+)*$)");
+
+  if (gamertag.length() < 1 || gamertag.length() > 15) {
     return false;
   }
 
-  if (gamertag.length() > 15) {
-    return false;
-  }
-
-  // Gamertag cannot start with a number.
-  if (std::isdigit(gamertag.at(0))) {
-    return false;
-  }
-
-  return std::find_if(gamertag.cbegin(), gamertag.cend(), [](char c) {
-           return !(std::isalnum(c) || (c == ' '));
-         }) == gamertag.cend();
+  return std::regex_match(gamertag, pattern);
 }
 
 }  // namespace xam

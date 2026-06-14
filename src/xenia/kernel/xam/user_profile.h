@@ -17,9 +17,9 @@
 #include <vector>
 
 #include "xenia/kernel/xam/user_property.h"
+#include "xenia/kernel/xam/xam.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_profile.h"
 #include "xenia/kernel/xam/xdbf/gpd_info_title.h"
-#include "xenia/xbox.h"
 
 namespace xe {
 namespace kernel {
@@ -77,8 +77,13 @@ enum class XTileType {
 inline const std::map<XTileType, std::string> kTileFileNames = {
     {XTileType::kGamerTile, "tile_64.png"},
     {XTileType::kGamerTileSmall, "tile_32.png"},
-    {XTileType::kPersonalGamerTile, "tile_64.png"},
-    {XTileType::kPersonalGamerTileSmall, "tile_32.png"},
+    {XTileType::kLocalGamerTile, "tile_64.png"},
+    {XTileType::kLocalGamerTileSmall, "tile_32.png"},
+    {XTileType::kAwardedGamerTile, "64_{:08x}{:08x}{:08x}.png"},
+    {XTileType::kAwardedGamerTileSmall, "32_{:08x}{:08x}{:08x}.png"},
+    {XTileType::kGamerTileByImageId, "{:d}_{:08x}{:08x}{:08x}.png"},
+    {XTileType::kPersonalGamerTile, "pp_64.png"},
+    {XTileType::kPersonalGamerTileSmall, "pp_32.png"},
     {XTileType::kAvatarGamerTile, "avtr_64.png"},
     {XTileType::kAvatarGamerTileSmall, "avtr_32.png"},
 };
@@ -86,13 +91,21 @@ inline const std::map<XTileType, std::string> kTileFileNames = {
 static constexpr std::pair<uint16_t, uint16_t> kProfileIconSize = {64, 64};
 static constexpr std::pair<uint16_t, uint16_t> kProfileIconSizeSmall = {32, 32};
 
+enum class SignInState : uint32_t {
+  NotSignedIn,
+  SignedInLocally,  // Offline
+  SignedInToLive,   // Online
+};
+
 class UserProfile {
  public:
   UserProfile(const uint64_t xuid, const X_XAMACCOUNTINFO* account_info);
 
   uint64_t xuid() const { return xuid_; }
   std::string name() const { return account_info_.GetGamertagString(); }
-  uint32_t signin_state() const { return 1; }
+  uint32_t signin_state() const {
+    return static_cast<uint32_t>(SignInState::SignedInLocally);
+  };
   uint32_t type() const { return 1 | 2; /* local | online profile? */ }
 
   uint32_t GetReservedFlags() const {
